@@ -9,13 +9,22 @@ Description: Provides a simple, tidy interface for calculating the Neighborhood
     socioeconomic status (SES), using data from the US Census Bureau's American
     Community Survey (ACS). Features include automatic data fetching, flexible
     geographies (county, tract, block group), and optional spatial imputation.
-License: MIT + file LICENSE.md
+License: MIT + file LICENSE
 Encoding: UTF-8
 URL: https://github.com/HanLabCollaboration/ReproducibleNDI
 BugReports: https://github.com/HanLabCollaboration/ReproducibleNDI/issues
 RoxygenNote: 7.3.2
 Imports:
+    dplyr,
+    tidycensus,
+    glue,
+    purrr,
     magrittr,
+    sf,
+    spdep,
+    psych,
+    tidyr,
+    stringr,
     rlang
 Suggests:
     knitr,
