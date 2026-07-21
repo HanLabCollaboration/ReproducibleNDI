@@ -18,5 +18,8 @@ editing_details.R
 # batch pipeline: HPC scripts, pre-computed output, and logs
 batch/
 
+# local tests
+tests/
+
 # Claude project instructions
 CLAUDE.md
