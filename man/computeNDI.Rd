@@ -19,11 +19,12 @@ computeNDI(
 )
 }
 \arguments{
-\item{type}{The NDI methodology. Must be `"messer"` (default).
-`"powell_wiley"` is reserved for a future release.}
+\item{type}{The NDI methodology. Must be `"messer"` (default) or
+`"powell_wiley"`.}
 
 \item{geo}{The geography level to compute the index for. Must be one of
-`"county"`, `"tract"`, or `"block group"` (or `"cbg"`).}
+`"county"`, `"tract"`, or `"block group"` (or `"cbg"`). `"block group"`
+is not available for `type = "powell_wiley"`.}
 
 \item{year}{The 5-year ACS survey year (e.g., 2022). Must be >= 2011, and
 must be >= 2013 for census block group.}
@@ -59,10 +60,12 @@ Must be `"tot_pop"` (default) or `"none"`. Passed to `imputeMissing()` as
 \value{
 A list containing the following elements:
 \itemize{
-  \item `df_ndi_raw`: Baseline NDI (no imputation) with `NDI` and
-    `NDIQuartile`. Identical to `df_ndi` when no imputation is requested.
+  \item `df_ndi_raw`: Baseline NDI (no imputation). Identical to `df_ndi`
+    when no imputation is requested.
   \item `df_ndi`: Requested NDI with dynamically named columns depending on
-    parameters: `NDI` or `NDIImputed`, plus the corresponding quartile column.
+    parameters: `NDI` or `NDIImputed`. For `type = "messer"` a quartile
+    grouping column (`NDIQuartile` / `NDIImputedQuartile`) is also included;
+    `type = "powell_wiley"` returns the score only.
   \item `df_raw_values`: Raw input data without geometry.
   \item `df_geometry`: Data frame containing only GEOID and geometry.
   \item `df_imputed`: Imputed data without geometry.
@@ -76,7 +79,7 @@ Fetches and processes ACS data to calculate the Neighborhood Deprivation
 Index (NDI), a composite measure of neighborhood-level socioeconomic
 deprivation.
 
-The `type` parameter selects the NDI methodology. Currently implemented:
+The `type` parameter selects the NDI methodology:
 \itemize{
   \item `"messer"`: Messer et al. (2006), following the implementation of
     `ndi::messer`. A single principal component is extracted from the
@@ -85,9 +88,20 @@ The `type` parameter selects the NDI methodology. Currently implemented:
     `PC1 / eigenvalue^2`. Unlike `ndi::messer`, the component sign is
     aligned so that `POV` loads positively (higher NDI = more
     deprivation), which keeps the orientation consistent across scope
-    groups.
+    groups. Available for `geo = "county"`, `"tract"`, or `"block group"`,
+    and returns a quartile grouping (`NDIQuartile`).
+  \item `"powell_wiley"`: Andrews et al. (2020) / Powell-Wiley, following
+    the implementation of `ndi::powell_wiley`. A promax-rotated principal
+    component analysis (number of factors chosen by the Kaiser criterion)
+    is fit to 13 ACS-derived component variables, and regression-based
+    scores on the first component define the index. Unlike
+    `ndi::powell_wiley`, the sign is aligned so that the proportion of
+    families below poverty loads positively (higher NDI = more
+    deprivation), and the population-weighted quintile grouping is **not**
+    computed (only the score is returned). Available for `geo = "county"`
+    or `"tract"` only, because its ACS data-profile and subject tables are
+    not published at block-group level.
 }
-`"powell_wiley"` is reserved and not yet implemented.
 
 The function automates: 1) data fetching from `tidycensus`, 2) calculation
 of the method's component variables, 3) optional spatial mean imputation
@@ -126,12 +140,25 @@ compared. The requested NDI column is named dynamically: `NDI` or
     scope  = "state",
     return_format = "minimal"
   )
+
+  # Powell-Wiley NDI for California tracts (county/tract only, score only)
+  ndi_pw <- computeNDI(
+    type   = "powell_wiley",
+    geo    = "tract",
+    year   = 2022,
+    states = "CA",
+    scope  = "state"
+  )
 }
 }
 \references{
 Messer, L.C., Laraia, B.A., Kaufman, J.S., et al. (2006). The development
 of a standardized neighborhood deprivation index. Journal of Urban Health,
 83(6), 1041-1062.
+
+Andrews, M.R., Tamura, K., Claudel, S.E., et al. (2020). Geospatial
+analysis of neighborhood deprivation index (NDI) for the United States by
+county. Journal of Maps, 16(1), 101-112.
 
 Methodology ported from the `ndi` package by Ian D. Buller
 (\url{https://CRAN.R-project.org/package=ndi}).

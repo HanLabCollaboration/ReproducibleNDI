@@ -5,7 +5,7 @@
 #' Index (NDI), a composite measure of neighborhood-level socioeconomic
 #' deprivation.
 #'
-#' The `type` parameter selects the NDI methodology. Currently implemented:
+#' The `type` parameter selects the NDI methodology:
 #' \itemize{
 #'   \item `"messer"`: Messer et al. (2006), following the implementation of
 #'     `ndi::messer`. A single principal component is extracted from the
@@ -14,9 +14,20 @@
 #'     `PC1 / eigenvalue^2`. Unlike `ndi::messer`, the component sign is
 #'     aligned so that `POV` loads positively (higher NDI = more
 #'     deprivation), which keeps the orientation consistent across scope
-#'     groups.
+#'     groups. Available for `geo = "county"`, `"tract"`, or `"block group"`,
+#'     and returns a quartile grouping (`NDIQuartile`).
+#'   \item `"powell_wiley"`: Andrews et al. (2020) / Powell-Wiley, following
+#'     the implementation of `ndi::powell_wiley`. A promax-rotated principal
+#'     component analysis (number of factors chosen by the Kaiser criterion)
+#'     is fit to 13 ACS-derived component variables, and regression-based
+#'     scores on the first component define the index. Unlike
+#'     `ndi::powell_wiley`, the sign is aligned so that the proportion of
+#'     families below poverty loads positively (higher NDI = more
+#'     deprivation), and the population-weighted quintile grouping is **not**
+#'     computed (only the score is returned). Available for `geo = "county"`
+#'     or `"tract"` only, because its ACS data-profile and subject tables are
+#'     not published at block-group level.
 #' }
-#' `"powell_wiley"` is reserved and not yet implemented.
 #'
 #' The function automates: 1) data fetching from `tidycensus`, 2) calculation
 #' of the method's component variables, 3) optional spatial mean imputation
@@ -28,10 +39,11 @@
 #' compared. The requested NDI column is named dynamically: `NDI` or
 #' `NDIImputed`.
 #'
-#' @param type The NDI methodology. Must be `"messer"` (default).
-#'   `"powell_wiley"` is reserved for a future release.
+#' @param type The NDI methodology. Must be `"messer"` (default) or
+#'   `"powell_wiley"`.
 #' @param geo The geography level to compute the index for. Must be one of
-#'   `"county"`, `"tract"`, or `"block group"` (or `"cbg"`).
+#'   `"county"`, `"tract"`, or `"block group"` (or `"cbg"`). `"block group"`
+#'   is not available for `type = "powell_wiley"`.
 #' @param year The 5-year ACS survey year (e.g., 2022). Must be >= 2011, and
 #'   must be >= 2013 for census block group.
 #' @param states A vector of state abbreviations (e.g., `c("CA", "NY")`) or
@@ -58,10 +70,12 @@
 #' @return
 #' A list containing the following elements:
 #' \itemize{
-#'   \item `df_ndi_raw`: Baseline NDI (no imputation) with `NDI` and
-#'     `NDIQuartile`. Identical to `df_ndi` when no imputation is requested.
+#'   \item `df_ndi_raw`: Baseline NDI (no imputation). Identical to `df_ndi`
+#'     when no imputation is requested.
 #'   \item `df_ndi`: Requested NDI with dynamically named columns depending on
-#'     parameters: `NDI` or `NDIImputed`, plus the corresponding quartile column.
+#'     parameters: `NDI` or `NDIImputed`. For `type = "messer"` a quartile
+#'     grouping column (`NDIQuartile` / `NDIImputedQuartile`) is also included;
+#'     `type = "powell_wiley"` returns the score only.
 #'   \item `df_raw_values`: Raw input data without geometry.
 #'   \item `df_geometry`: Data frame containing only GEOID and geometry.
 #'   \item `df_imputed`: Imputed data without geometry.
@@ -74,6 +88,10 @@
 #' Messer, L.C., Laraia, B.A., Kaufman, J.S., et al. (2006). The development
 #' of a standardized neighborhood deprivation index. Journal of Urban Health,
 #' 83(6), 1041-1062.
+#'
+#' Andrews, M.R., Tamura, K., Claudel, S.E., et al. (2020). Geospatial
+#' analysis of neighborhood deprivation index (NDI) for the United States by
+#' county. Journal of Maps, 16(1), 101-112.
 #'
 #' Methodology ported from the `ndi` package by Ian D. Buller
 #' (\url{https://CRAN.R-project.org/package=ndi}).
@@ -111,6 +129,15 @@
 #'     scope  = "state",
 #'     return_format = "minimal"
 #'   )
+#'
+#'   # Powell-Wiley NDI for California tracts (county/tract only, score only)
+#'   ndi_pw <- computeNDI(
+#'     type   = "powell_wiley",
+#'     geo    = "tract",
+#'     year   = 2022,
+#'     states = "CA",
+#'     scope  = "state"
+#'   )
 #' }
 
 computeNDI <- function(
@@ -128,9 +155,6 @@ computeNDI <- function(
 ) {
 
 type <- rlang::arg_match(type, values = c("messer", "powell_wiley"))
-if (type == "powell_wiley") {
-  stop("type = 'powell_wiley' is not yet implemented. Use type = 'messer'.")
-}
 geo <- rlang::arg_match(geo, values = c("county", "tract",
                                         "block group", "cbg"))
 return_format <- rlang::arg_match(return_format, values = c("minimal",
@@ -144,6 +168,15 @@ if (!is.numeric(year) || year < 2011) {
 if (scope == "county" && !geo %in% c("tract", "block group", "cbg")) {
   stop("scope = 'county' can only be used with geo = 'tract', 'block group', or 'cbg'")
 }
+# Powell-Wiley uses ACS data-profile (DP) and subject (S) tables, which the
+# Census API does not publish below the tract level.
+if (type == "powell_wiley" && geo %in% c("block group", "cbg")) {
+  stop(glue::glue(
+    "type = 'powell_wiley' supports geo = 'county' or 'tract' only ",
+    "(its ACS data-profile/subject tables are not available at block group). ",
+    "Got geo = '{geo}'."
+  ))
+}
 if (scope == "national") {
   message(glue::glue("Since the scope == 'national', it will pull all states"))
   states <- "all"
@@ -156,11 +189,25 @@ if (geo %in% c("block group", "cbg") && year < 2013) {
 }
 
 # --- Method dispatch: each NDI type has its own fetch/calculate/process workers ---
-fetch_fun     <- switch(type, messer = fetchMesserAcs)
-calculate_fun <- switch(type, messer = calculateMesserVars)
-process_fun   <- switch(type, messer = processMesserScope)
-varlist       <- switch(type, messer = c("OCC", "CWD", "POV", "FHH",
-                                         "PUB", "U30", "EDU", "EMP"))
+fetch_fun     <- switch(type,
+                        messer       = fetchMesserAcs,
+                        powell_wiley = fetchPowellWileyAcs)
+calculate_fun <- switch(type,
+                        messer       = calculateMesserVars,
+                        powell_wiley = calculatePowellWileyVars)
+process_fun   <- switch(type,
+                        messer       = processMesserScope,
+                        powell_wiley = processPowellWileyScope)
+varlist       <- switch(type,
+                        messer       = c("OCC", "CWD", "POV", "FHH",
+                                         "PUB", "U30", "EDU", "EMP"),
+                        powell_wiley = c("logMedHHInc", "PctNoIDR", "PctPubAsst",
+                                         "logMedHomeVal", "PctWorkClass",
+                                         "PctFemHeadKids", "PctNotOwnerOcc",
+                                         "PctNoPhone", "PctNComPlmb", "PctEducLTHS",
+                                         "PctEducLTBch", "PctFamBelowPov", "PctUnempl"))
+# Whether this method produces a quantile-group column alongside the score.
+group_suffix <- switch(type, messer = "Quartile", powell_wiley = NULL)
 
 get_geometry <- impute || keep_geometry
 if (states[1] == "all") {
@@ -194,7 +241,7 @@ ndi_data <- dplyr::select(
   dplyr::any_of("geometry"))
 ndi_col <- dplyr::case_when(impute ~ "NDIImputed",
                             TRUE ~ "NDI")
-ndi_quartile_col <- paste0(ndi_col, "Quartile")
+ndi_group_col <- if (!is.null(group_suffix)) paste0(ndi_col, group_suffix) else NULL
 if (!quiet)
   message(switch(scope, state = "Scope is 'state'. Processing each state separately",
                  county = "Scope is 'county'. Processing each county separately",
@@ -254,8 +301,10 @@ else {
   df_components <- single_result$df_components
   out_obj_pca <- single_result$pca_object
 }
-df_ndi <- dplyr::rename(df_ndi, `:=`(!!ndi_col, NDI),
-                        `:=`(!!ndi_quartile_col, NDIQuartile))
+df_ndi <- dplyr::rename(df_ndi, `:=`(!!ndi_col, NDI))
+if (!is.null(ndi_group_col)) {
+  df_ndi <- dplyr::rename(df_ndi, `:=`(!!ndi_group_col, NDIQuartile))
+}
 if (impute) {
   if (!quiet)
     message("Computing baseline NDI (no imputation) for df_ndi_raw...")

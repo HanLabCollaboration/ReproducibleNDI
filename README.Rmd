@@ -30,9 +30,12 @@ The Neighborhood Deprivation Index is a composite score summarizing socioeconomi
 
 Several NDI methodologies exist; the `type` parameter selects which one to compute. Currently implemented:
 
-* **`type = "messer"`** — Messer et al. (2006), following the implementation of the [`ndi`](https://CRAN.R-project.org/package=ndi) package. A single principal component is extracted from 8 ACS-derived component variables (occupation, crowding, poverty, female-headed households, public assistance, income under $30k, education, unemployment).
+* **`type = "messer"`** — Messer et al. (2006), following the implementation of the [`ndi`](https://CRAN.R-project.org/package=ndi) package. A single principal component is extracted from 8 ACS-derived component variables (occupation, crowding, poverty, female-headed households, public assistance, income under $30k, education, unemployment). Available for county, tract, and block group; returns a quartile grouping (`NDIQuartile`).
+* **`type = "powell_wiley"`** — Andrews et al. (2020), following the implementation of the `ndi` package. A promax-rotated PCA (Kaiser criterion for the number of factors) is fit to 13 ACS-derived component variables. Available for **county and tract only** (see below), and this package returns the **score only** (the population-weighted quintile grouping is not computed).
 
-`type = "powell_wiley"` is planned next.
+### Why Powell-Wiley is not available at block group
+
+Seven of Powell-Wiley's 13 components — owner-occupancy, telephone service, plumbing, educational attainment, family poverty, and unemployment — are drawn from the ACS **Data Profile (`DP`)** and **Subject (`S`)** tables. The US Census Bureau does not tabulate those two dataset families below the census-tract level, so `tidycensus::get_acs()` cannot retrieve them for block groups; the request fails with *"Block groups are not an available geography in the Data Profile and Subject Tables datasets."* This is a Census Bureau tabulation policy (stable across all ACS 5-year vintages 2011–2024), not a limitation of this package or of `tidycensus`. The Messer method, by contrast, uses only detailed (`B`/`C`) tables, which the Census Bureau publishes down to the block-group level — which is why Messer supports block group and Powell-Wiley does not.
 
 ## Usage
 
@@ -61,6 +64,24 @@ Key options (mirroring `ReproducibleYostIndex`):
 * **`scope`**: `"national"` (one PCA over all geographies), `"state"`, or `"county"` (PCA fit separately within each group).
 * **`impute`**: spatial mean imputation of missing components using queen contiguity, optionally weighted by total population (`weight_var`).
 * **`return_format`**: `"detailed"` (list of data frames + PCA object) or `"minimal"` (one data frame).
+
+## Index of Concentration at the Extremes (ICE)
+
+`computeICE()` computes Krieger's Index of Concentration at the Extremes, a separate family of measures from the NDI functions above. Each ICE measure is a self-contained per-geography ratio, `(Advantaged − Deprived) / Total`, ranging from −1 to +1 — so, unlike the NDI measures, it involves no cross-geography ranking or PCA and therefore has **no `scope` argument**.
+
+`computeICE()` returns all five measures from `ndi::krieger`: `ICE_inc` (income), `ICE_edu` (education), `ICE_rewb` (race: NH-white vs NH-Black), `ICE_wbinc` (high-income white vs low-income Black), and `ICE_wpcinc` (income concentration among white households). Because every ICE variable comes from ACS detailed (`B`) tables, ICE is available at **county, tract, and block group** — including the block-group reach that Powell-Wiley cannot offer.
+
+```r
+# ICE for Rhode Island tracts, 2022 (all five measures)
+ice_ri <- computeICE(geo = "tract", year = 2022, states = "RI")
+head(ice_ri$df_ice)
+
+# Block-group ICE, minimal output
+ice_bg <- computeICE(geo = "block group", year = 2022, states = "RI",
+                     return_format = "minimal")
+```
+
+Spatial imputation is not yet implemented for `computeICE()`; the `impute` argument is reserved for a future release.
 
 ## Status
 
