@@ -34,10 +34,15 @@
 #'   2016 (see \code{\link{calculateICEVars}}).
 #' @param states A vector of state abbreviations (e.g., `c("CA", "NY")`) or
 #'   `'all'` (default) for the entire US.
-#' @param impute Logical. Reserved for a future release; if `TRUE`, the function
-#'   stops with a "not yet implemented" message. Defaults to `FALSE`.
+#' @param impute Logical. If `TRUE`, missing values in each of the five ICE
+#'   measures are spatially imputed from Queen-contiguity neighbors via
+#'   \code{\link{imputeMissingICE}} (geometry is required, so `keep_geometry` is
+#'   forced to `TRUE`). The returned `df_ice` then carries the imputed measures
+#'   plus `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and an
+#'   `annotation` column, and the pre-imputation baseline is also returned as
+#'   `df_ice_raw`. Defaults to `FALSE`.
 #' @param keep_geometry Logical. If `TRUE` (default), fetches geometry and
-#'   returns it in `df_geometry`.
+#'   returns it in `df_geometry`. Forced to `TRUE` when `impute = TRUE`.
 #' @param quiet Logical. If `TRUE`, suppresses messages. Defaults to `FALSE`.
 #' @param return_format Return `"detailed"` (default) or `"minimal"`.
 #'   `"minimal"` returns a single tibble of `GEOID`, geography name columns, and
@@ -46,14 +51,21 @@
 #'
 #' @return
 #' When `return_format = "minimal"`, a tibble with `GEOID`, geography name
-#' columns, and the five `ICE_*` measures, arranged by `GEOID`.
+#' columns, and the five `ICE_*` measures, arranged by `GEOID`. When
+#' `impute = TRUE`, the five measures are imputed and the tibble also carries
+#' `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and `annotation`.
 #'
 #' When `return_format = "detailed"` (default), a list containing:
 #' \itemize{
-#'   \item `df_ice`: `GEOID`, geography name columns, and the five `ICE_*` measures.
+#'   \item `df_ice`: `GEOID`, geography name columns, and the five `ICE_*`
+#'     measures. When `impute = TRUE`, the measures are imputed and the frame
+#'     also includes `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and
+#'     `annotation`.
 #'   \item `df_raw_values`: the building-block component sums and totals.
 #'   \item `df_geometry`: `GEOID` and geometry (when `keep_geometry = TRUE`).
-#'   \item `missing`: a per-measure missingness summary.
+#'   \item `missing`: a per-measure missingness summary (of the raw measures).
+#'   \item `df_ice_raw`: the pre-imputation baseline measures (only when
+#'     `impute = TRUE`).
 #' }
 #'
 #' @references
@@ -65,7 +77,7 @@
 #' (\url{https://CRAN.R-project.org/package=ndi}).
 #'
 #' @importFrom glue glue glue_collapse
-#' @importFrom dplyr select any_of all_of arrange mutate n group_by summarise
+#' @importFrom dplyr select any_of all_of arrange mutate n group_by summarise case_when
 #' @importFrom tidyr pivot_longer
 #'
 #' @export
@@ -111,8 +123,10 @@ computeICE <- function(
     ))
   }
 
-  if (isTRUE(impute)) {
-    stop("impute is not yet implemented for computeICE. It is reserved for a future release.")
+  # Spatial imputation needs geometry to build the neighbor graph.
+  if (isTRUE(impute) && !isTRUE(keep_geometry)) {
+    if (!quiet) message("impute = TRUE requires geometry; setting keep_geometry = TRUE.")
+    keep_geometry <- TRUE
   }
 
   # Resolve states (same validation pattern as computeNDI)
@@ -143,11 +157,49 @@ computeICE <- function(
                   "A_wbinc", "P_wbinc", "A_wpcinc", "P_wpcinc", "tot_pop")
   name_cols  <- c("block_group", "tract", "county", "state")
 
-  # df_ice: GEOID, geography name columns, the five ICE measures (no geometry)
-  df_ice <- ice_data |>
+  # df_ice_raw: baseline (no imputation) — GEOID, name columns, five ICE measures
+  df_ice_raw <- ice_data |>
     dplyr::select(GEOID, dplyr::any_of(name_cols), dplyr::all_of(ice_cols))
-  if (inherits(df_ice, "sf")) df_ice <- sf::st_drop_geometry(df_ice)
-  df_ice <- dplyr::arrange(df_ice, GEOID)
+  if (inherits(df_ice_raw, "sf")) df_ice_raw <- sf::st_drop_geometry(df_ice_raw)
+  df_ice_raw <- dplyr::arrange(df_ice_raw, GEOID)
+
+  # missing: per-measure missingness summary (always on the raw source measures)
+  missing <- df_ice_raw |>
+    dplyr::select(dplyr::all_of(ice_cols)) |>
+    tidyr::pivot_longer(cols = dplyr::everything(),
+                        names_to = "measure", values_to = "val") |>
+    dplyr::group_by(measure) |>
+    dplyr::summarise(
+      total = dplyr::n(),
+      n_missing = sum(is.na(val)),
+      percent_missing = paste0(round(mean(is.na(val)) * 100, 2), " %"),
+      .groups = "drop"
+    )
+
+  # df_ice: imputed when impute = TRUE, otherwise the baseline
+  if (isTRUE(impute)) {
+    if (!inherits(ice_data, "sf") || !"geometry" %in% colnames(ice_data)) {
+      stop("Imputation requires geometry; re-run with keep_geometry = TRUE.")
+    }
+    if (!quiet) message("Imputing missing ICE measures via spatial neighbors...")
+
+    ice_imp <- imputeMissingICE(ice_data, weight_var = "none",
+                                measures = ice_cols, quiet = quiet)
+
+    df_ice <- ice_imp |>
+      dplyr::select(GEOID, dplyr::any_of(name_cols), dplyr::all_of(ice_cols),
+                    nvar_imputed, nvar_still_missing, vars_imputed) |>
+      dplyr::mutate(
+        annotation = dplyr::case_when(
+          nvar_still_missing > 0 ~ "Imputation incomplete",
+          nvar_imputed > 0       ~ "Imputation completed",
+          TRUE                   ~ "Complete data"
+        )
+      ) |>
+      dplyr::arrange(GEOID)
+  } else {
+    df_ice <- df_ice_raw
+  }
 
   if (return_format == "minimal") {
     return(df_ice)
@@ -163,24 +215,14 @@ computeICE <- function(
   df_geometry <- ice_data |>
     dplyr::select(GEOID, dplyr::any_of("geometry"))
 
-  # missing: per-measure missingness summary
-  missing <- df_ice |>
-    dplyr::select(dplyr::all_of(ice_cols)) |>
-    tidyr::pivot_longer(cols = dplyr::everything(),
-                        names_to = "measure", values_to = "val") |>
-    dplyr::group_by(measure) |>
-    dplyr::summarise(
-      total = dplyr::n(),
-      n_missing = sum(is.na(val)),
-      percent_missing = paste0(round(mean(is.na(val)) * 100, 2), " %"),
-      .groups = "drop"
-    )
-
   out <- list(
     df_ice = df_ice,
     df_raw_values = df_raw_values,
     df_geometry = df_geometry,
     missing = missing
   )
+  # When imputing, also return the pre-imputation baseline for comparison.
+  if (isTRUE(impute)) out$df_ice_raw <- df_ice_raw
+
   return(out)
 }

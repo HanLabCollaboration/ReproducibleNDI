@@ -21,5 +21,5 @@ utils::globalVariables(c(
   "ICE_inc", "ICE_edu", "ICE_rewb", "ICE_wbinc", "ICE_wpcinc",
   "A_inc", "P_inc", "TotalPop_inc", "A_edu", "P_edu", "TotalPop_edu",
   "NHoLW", "NHoLB", "TotalPop_re", "A_wbinc", "P_wbinc", "A_wpcinc",
-  "P_wpcinc", "val", "measure"
+  "P_wpcinc", "val", "measure", "vars_imputed"
 ))

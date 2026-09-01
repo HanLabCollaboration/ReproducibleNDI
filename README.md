@@ -59,6 +59,35 @@ all ACS 5-year vintages 2011–2024), not a limitation of this package or of
 block-group level — which is why Messer supports block group and
 Powell-Wiley does not.
 
+### Missing data: complete cases vs. pairwise correlation
+
+Both NDI methods here fit their PCA on **complete cases only**. Any
+geography missing one or more of the method's component variables is
+dropped *before* the component correlation matrix is computed (listwise
+deletion); unless `impute = TRUE`, that geography then receives an `NA`
+index score and is flagged in the `annotation` column.
+
+This is a deliberate deviation from the original
+[`ndi`](https://CRAN.R-project.org/package=ndi) package, which passes the
+component data straight to `psych::principal()` and therefore builds the
+correlation matrix from **pairwise-complete observations** (psych's
+default `use = "pairwise"`). Under that approach a partially-missing
+geography still contributes to every pairwise correlation for which it
+observes *both* variables.
+
+Why this matters:
+
+- The set of geographies that determine the component loadings can differ
+  between the two approaches, so the fitted weights — and therefore the
+  resulting scores — may differ slightly from `ndi`, most noticeably in
+  scopes with substantial missingness.
+- Complete-case fitting is the stricter, more transparent choice: the
+  fitting sample is exactly the set of fully-observed geographies, with no
+  geography contributing to some correlations but not others. Setting
+  `impute = TRUE` (queen-contiguity spatial mean) fills the missing
+  components so those geographies rejoin the complete-case set before the
+  PCA is fit.
+
 ## Usage
 
 ``` r

@@ -39,6 +39,22 @@
 #' compared. The requested NDI column is named dynamically: `NDI` or
 #' `NDIImputed`.
 #'
+#' @section Missing data (complete cases vs. pairwise correlation):
+#' Both methods fit the PCA on **complete cases only**: any geography missing
+#' one or more of the method's component variables is dropped *before* the
+#' component correlation matrix is computed (listwise deletion). Unless
+#' `impute = TRUE`, such a geography receives an `NA` score and is flagged in
+#' the `annotation` column. This is a deliberate deviation from the original
+#' `ndi` package, which passes the component data directly to
+#' `psych::principal()` and so builds the correlation matrix from
+#' **pairwise-complete observations** (psych's default `use = "pairwise"`),
+#' letting partially-missing geographies still contribute to each pairwise
+#' correlation. Because the two approaches can fit the loadings on different
+#' samples of geographies, the resulting component weights — and scores — may
+#' differ slightly from `ndi`, most noticeably in scopes with substantial
+#' missingness. Setting `impute = TRUE` (queen-contiguity spatial mean) fills
+#' missing components so those geographies rejoin the complete-case fitting set.
+#'
 #' @param type The NDI methodology. Must be `"messer"` (default) or
 #'   `"powell_wiley"`.
 #' @param geo The geography level to compute the index for. Must be one of

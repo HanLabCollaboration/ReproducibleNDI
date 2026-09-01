@@ -26,11 +26,16 @@ computeICE(
 \item{states}{A vector of state abbreviations (e.g., `c("CA", "NY")`) or
 `'all'` (default) for the entire US.}
 
-\item{impute}{Logical. Reserved for a future release; if `TRUE`, the function
-stops with a "not yet implemented" message. Defaults to `FALSE`.}
+\item{impute}{Logical. If `TRUE`, missing values in each of the five ICE
+measures are spatially imputed from Queen-contiguity neighbors via
+\code{\link{imputeMissingICE}} (geometry is required, so `keep_geometry` is
+forced to `TRUE`). The returned `df_ice` then carries the imputed measures
+plus `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and an
+`annotation` column, and the pre-imputation baseline is also returned as
+`df_ice_raw`. Defaults to `FALSE`.}
 
 \item{keep_geometry}{Logical. If `TRUE` (default), fetches geometry and
-returns it in `df_geometry`.}
+returns it in `df_geometry`. Forced to `TRUE` when `impute = TRUE`.}
 
 \item{quiet}{Logical. If `TRUE`, suppresses messages. Defaults to `FALSE`.}
 
@@ -42,14 +47,21 @@ the five `ICE_*` measures.}
 }
 \value{
 When `return_format = "minimal"`, a tibble with `GEOID`, geography name
-columns, and the five `ICE_*` measures, arranged by `GEOID`.
+columns, and the five `ICE_*` measures, arranged by `GEOID`. When
+`impute = TRUE`, the five measures are imputed and the tibble also carries
+`nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and `annotation`.
 
 When `return_format = "detailed"` (default), a list containing:
 \itemize{
-  \item `df_ice`: `GEOID`, geography name columns, and the five `ICE_*` measures.
+  \item `df_ice`: `GEOID`, geography name columns, and the five `ICE_*`
+    measures. When `impute = TRUE`, the measures are imputed and the frame
+    also includes `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and
+    `annotation`.
   \item `df_raw_values`: the building-block component sums and totals.
   \item `df_geometry`: `GEOID` and geometry (when `keep_geometry = TRUE`).
-  \item `missing`: a per-measure missingness summary.
+  \item `missing`: a per-measure missingness summary (of the raw measures).
+  \item `df_ice_raw`: the pre-imputation baseline measures (only when
+    `impute = TRUE`).
 }
 }
 \description{
