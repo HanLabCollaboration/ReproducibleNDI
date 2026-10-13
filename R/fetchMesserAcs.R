@@ -6,7 +6,7 @@
 #' (Messer et al. 2006), following the variable definitions of the
 #' `ndi` package (`ndi::messer`).
 #'
-#' @param geo Geography level (e.g., "county", "tract", "block group").
+#' @param geo Geography level (`"county"` or `"tract"`).
 #' @param year The ACS5 year.
 #' @param states A vector of state abbreviations or 'all'.
 #' @param get_geometry Boolean, whether to download geometry.

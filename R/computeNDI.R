@@ -14,8 +14,10 @@
 #'     `PC1 / eigenvalue^2`. Unlike `ndi::messer`, the component sign is
 #'     aligned so that `POV` loads positively (higher NDI = more
 #'     deprivation), which keeps the orientation consistent across scope
-#'     groups. Available for `geo = "county"`, `"tract"`, or `"block group"`,
-#'     and returns a quartile grouping (`NDIQuartile`).
+#'     groups. Available for `geo = "county"` or `"tract"` only, because
+#'     its ACS detailed tables `B25115` and `B06009` (and `B19058` in 2013)
+#'     are not published at block-group level. Returns a quartile grouping
+#'     (`NDIQuartile`).
 #'   \item `"powell_wiley"`: Andrews et al. (2020) / Powell-Wiley, following
 #'     the implementation of `ndi::powell_wiley`. A promax-rotated principal
 #'     component analysis (number of factors chosen by the Kaiser criterion)
@@ -57,11 +59,10 @@
 #'
 #' @param type The NDI methodology. Must be `"messer"` (default) or
 #'   `"powell_wiley"`.
-#' @param geo The geography level to compute the index for. Must be one of
-#'   `"county"`, `"tract"`, or `"block group"` (or `"cbg"`). `"block group"`
-#'   is not available for `type = "powell_wiley"`.
-#' @param year The 5-year ACS survey year (e.g., 2022). Must be >= 2011, and
-#'   must be >= 2013 for census block group.
+#' @param geo The geography level to compute the index for. Must be
+#'   `"county"` or `"tract"`. Neither method is available at block group;
+#'   for a block-group measure, see \code{\link{computeICE}}.
+#' @param year The 5-year ACS survey year (e.g., 2022). Must be >= 2011.
 #' @param states A vector of state abbreviations (e.g., `c("CA", "NY")`) or
 #'   `'all'` to run for the entire US.
 #' @param impute Logical. If `TRUE`, performs a simple spatial mean imputation
@@ -70,7 +71,7 @@
 #'   `"county"` scope. `"national"` fits one PCA over all geographies
 #'   (automatically sets `states = 'all'`). `"state"` fits the PCA within
 #'   each state separately. `"county"` fits the PCA within each county
-#'   separately (only valid for `geo = "tract"` or `"block group"`).
+#'   separately (only valid for `geo = "tract"`).
 #' @param keep_geometry Logical. If `TRUE` (default), attaches geometry to
 #'   `df_geometry` in the returned list. Geometry is always fetched when
 #'   `impute = TRUE`.
@@ -181,27 +182,26 @@ if (!is.numeric(year) || year < 2011) {
   stop(glue::glue("'year' must be a number >= 2011. Got: {year}"))
 }
 
-if (scope == "county" && !geo %in% c("tract", "block group", "cbg")) {
-  stop("scope = 'county' can only be used with geo = 'tract', 'block group', or 'cbg'")
-}
-# Powell-Wiley uses ACS data-profile (DP) and subject (S) tables, which the
-# Census API does not publish below the tract level.
-if (type == "powell_wiley" && geo %in% c("block group", "cbg")) {
+# Neither method can be computed at block group, where some of its ACS tables
+# are not published:
+#   messer:       detailed tables B25115 and B06009 (and B19058 in 2013)
+#   powell_wiley: every data-profile (DP) and subject (S) table
+if (geo %in% c("block group", "cbg")) {
+  reason <- switch(type,
+    messer       = "its ACS tables B25115 and B06009 are",
+    powell_wiley = "its ACS data-profile/subject tables are"
+  )
   stop(glue::glue(
-    "type = 'powell_wiley' supports geo = 'county' or 'tract' only ",
-    "(its ACS data-profile/subject tables are not available at block group). ",
-    "Got geo = '{geo}'."
+    "type = '{type}' supports geo = 'county' or 'tract' only ",
+    "({reason} not available at block group). Got geo = '{geo}'."
   ))
+}
+if (scope == "county" && geo != "tract") {
+  stop("scope = 'county' can only be used with geo = 'tract'")
 }
 if (scope == "national") {
   message(glue::glue("Since the scope == 'national', it will pull all states"))
   states <- "all"
-}
-# block group requires year >= 2013
-if (geo %in% c("block group", "cbg") && year < 2013) {
-  stop(glue::glue(
-    "geo = 'block group' requires year >= 2013. Got year = {year}."
-  ))
 }
 
 # --- Method dispatch: each NDI type has its own fetch/calculate/process workers ---

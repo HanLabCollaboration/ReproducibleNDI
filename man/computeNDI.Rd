@@ -22,12 +22,11 @@ computeNDI(
 \item{type}{The NDI methodology. Must be `"messer"` (default) or
 `"powell_wiley"`.}
 
-\item{geo}{The geography level to compute the index for. Must be one of
-`"county"`, `"tract"`, or `"block group"` (or `"cbg"`). `"block group"`
-is not available for `type = "powell_wiley"`.}
+\item{geo}{The geography level to compute the index for. Must be
+`"county"` or `"tract"`. Neither method is available at block group;
+for a block-group measure, see \code{\link{computeICE}}.}
 
-\item{year}{The 5-year ACS survey year (e.g., 2022). Must be >= 2011, and
-must be >= 2013 for census block group.}
+\item{year}{The 5-year ACS survey year (e.g., 2022). Must be >= 2011.}
 
 \item{states}{A vector of state abbreviations (e.g., `c("CA", "NY")`) or
 `'all'` to run for the entire US.}
@@ -39,7 +38,7 @@ for missing data using 'queen' contiguity.}
 `"county"` scope. `"national"` fits one PCA over all geographies
 (automatically sets `states = 'all'`). `"state"` fits the PCA within
 each state separately. `"county"` fits the PCA within each county
-separately (only valid for `geo = "tract"` or `"block group"`).}
+separately (only valid for `geo = "tract"`).}
 
 \item{keep_geometry}{Logical. If `TRUE` (default), attaches geometry to
 `df_geometry` in the returned list. Geometry is always fetched when
@@ -88,8 +87,10 @@ The `type` parameter selects the NDI methodology:
     `PC1 / eigenvalue^2`. Unlike `ndi::messer`, the component sign is
     aligned so that `POV` loads positively (higher NDI = more
     deprivation), which keeps the orientation consistent across scope
-    groups. Available for `geo = "county"`, `"tract"`, or `"block group"`,
-    and returns a quartile grouping (`NDIQuartile`).
+    groups. Available for `geo = "county"` or `"tract"` only, because
+    its ACS detailed tables `B25115` and `B06009` (and `B19058` in 2013)
+    are not published at block-group level. Returns a quartile grouping
+    (`NDIQuartile`).
   \item `"powell_wiley"`: Andrews et al. (2020) / Powell-Wiley, following
     the implementation of `ndi::powell_wiley`. A promax-rotated principal
     component analysis (number of factors chosen by the Kaiser criterion)

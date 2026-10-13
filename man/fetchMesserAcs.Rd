@@ -7,7 +7,7 @@
 fetchMesserAcs(geo, year, states, get_geometry)
 }
 \arguments{
-\item{geo}{Geography level (e.g., "county", "tract", "block group").}
+\item{geo}{Geography level (`"county"` or `"tract"`).}
 
 \item{year}{The ACS5 year.}
 

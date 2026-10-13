@@ -26,7 +26,7 @@ computeICE(
 \item{states}{A vector of state abbreviations (e.g., `c("CA", "NY")`) or
 `'all'` (default) for the entire US.}
 
-\item{impute}{Logical. If `TRUE`, missing values in each of the five ICE
+\item{impute}{Logical. If `TRUE`, missing values in each of the returned ICE
 measures are spatially imputed from Queen-contiguity neighbors via
 \code{\link{imputeMissingICE}} (geometry is required, so `keep_geometry` is
 forced to `TRUE`). Only geographies with population (`tot_pop > 0`) are
@@ -43,20 +43,20 @@ returns it in `df_geometry`. Forced to `TRUE` when `impute = TRUE`.}
 
 \item{return_format}{Return `"detailed"` (default) or `"minimal"`.
 `"minimal"` returns a single tibble of `GEOID`, geography name columns, and
-the five `ICE_*` measures.}
+the `ICE_*` measures.}
 
 \item{...}{Additional arguments (currently unused).}
 }
 \value{
 When `return_format = "minimal"`, a tibble with `GEOID`, geography name
-columns, and the five `ICE_*` measures, arranged by `GEOID`. When
-`impute = TRUE`, the five measures are imputed and the tibble also carries
+columns, and the `ICE_*` measures (five, or three at block group), arranged
+by `GEOID`. When `impute = TRUE`, the measures are imputed and the tibble also carries
 `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and `annotation`.
 
 When `return_format = "detailed"` (default), a list containing:
 \itemize{
-  \item `df_ice`: `GEOID`, geography name columns, and the five `ICE_*`
-    measures. When `impute = TRUE`, the measures are imputed and the frame
+  \item `df_ice`: `GEOID`, geography name columns, and the `ICE_*`
+    measures (five, or three at block group). When `impute = TRUE`, the measures are imputed and the frame
     also includes `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and
     `annotation`.
   \item `df_raw_values`: the building-block component sums and totals.
@@ -76,7 +76,7 @@ measure is a self-contained per-geography ratio of the form
 \eqn{(Advantaged - Deprived) / Total}. Because it involves no cross-geography
 ranking or principal component analysis, ICE has no `scope` argument.
 
-Five measures are returned:
+Five measures are returned (three at block group, see below):
 \itemize{
   \item `ICE_inc`: income concentration (high-income minus low-income households)
   \item `ICE_edu`: education concentration (bachelor's+ minus less-than-high-school, 25+)
@@ -88,10 +88,11 @@ Five measures are returned:
 }
 Each ranges from -1 (most deprived/segregated) to +1 (most privileged).
 
-All ICE variables come from ACS detailed (`B`) tables, which are published
-down to the block-group level; ICE is therefore available for `geo =
-"county"`, `"tract"`, or `"block group"` (unlike `ndi::krieger`, which is
-limited to county and tract).
+ICE is available for `geo = "county"`, `"tract"`, or `"block group"`
+(unlike `ndi::krieger`, which is limited to county and tract). At block
+group only `ICE_inc`, `ICE_edu` and `ICE_rewb` are returned: `ICE_wbinc` and
+`ICE_wpcinc` are left out, because household income by race (ACS tables
+`B19001H` and `B19001B`) is not published there.
 }
 \examples{
 \dontrun{
@@ -102,7 +103,7 @@ limited to county and tract).
   ice_ri <- computeICE(geo = "tract", year = 2022, states = "RI")
   head(ice_ri$df_ice)
 
-  # Block-group ICE (not possible for Powell-Wiley), minimal output
+  # Block-group ICE (the NDI stops at tract), minimal output
   ice_bg <- computeICE(geo = "block group", year = 2022, states = "RI",
                        return_format = "minimal")
 }

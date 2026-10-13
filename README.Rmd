@@ -26,16 +26,18 @@ The goal of `ReproducibleNDI` is to provide a simple, tidy interface for calcula
 
 ## What is the Neighborhood Deprivation Index?
 
-The Neighborhood Deprivation Index is a composite score summarizing socioeconomic deprivation at the neighborhood level from a set of ACS variables. This package automatically fetches the required ACS data and computes the index across flexible geographies (county, tract, block group).
+The Neighborhood Deprivation Index is a composite score summarizing socioeconomic deprivation at the neighborhood level from a set of ACS variables. This package automatically fetches the required ACS data and computes the index for counties and census tracts.
 
 Several NDI methodologies exist; the `type` parameter selects which one to compute. Currently implemented:
 
-* **`type = "messer"`** — Messer et al. (2006), following the implementation of the [`ndi`](https://CRAN.R-project.org/package=ndi) package. A single principal component is extracted from 8 ACS-derived component variables (occupation, crowding, poverty, female-headed households, public assistance, income under $30k, education, unemployment). Available for county, tract, and block group; returns a quartile grouping (`NDIQuartile`).
+* **`type = "messer"`** — Messer et al. (2006), following the implementation of the [`ndi`](https://CRAN.R-project.org/package=ndi) package. A single principal component is extracted from 8 ACS-derived component variables (occupation, crowding, poverty, female-headed households, public assistance, income under $30k, education, unemployment). Available for **county and tract only** (see below); returns a quartile grouping (`NDIQuartile`).
 * **`type = "powell_wiley"`** — Andrews et al. (2020), following the implementation of the `ndi` package. A promax-rotated PCA (Kaiser criterion for the number of factors) is fit to 13 ACS-derived component variables. Available for **county and tract only** (see below), and this package returns the **score only** (the population-weighted quintile grouping is not computed).
 
-### Why Powell-Wiley is not available at block group
+### Why the NDI is not available at block group
 
-Seven of Powell-Wiley's 13 components — owner-occupancy, telephone service, plumbing, educational attainment, family poverty, and unemployment — are drawn from the ACS **Data Profile (`DP`)** and **Subject (`S`)** tables. The US Census Bureau does not tabulate those two dataset families below the census-tract level, so `tidycensus::get_acs()` cannot retrieve them for block groups; the request fails with *"Block groups are not an available geography in the Data Profile and Subject Tables datasets."* This is a Census Bureau tabulation policy (stable across all ACS 5-year vintages 2011–2024), not a limitation of this package or of `tidycensus`. The Messer method, by contrast, uses only detailed (`B`/`C`) tables, which the Census Bureau publishes down to the block-group level — which is why Messer supports block group and Powell-Wiley does not.
+Seven of Powell-Wiley's 13 components — owner-occupancy, telephone service, plumbing, educational attainment (two components), family poverty, and unemployment — are drawn from the ACS **Data Profile (`DP`)** and **Subject (`S`)** tables. The US Census Bureau does not tabulate those two dataset families below the census-tract level, so `tidycensus::get_acs()` cannot retrieve them for block groups; the request fails with *"Block groups are not an available geography in the Data Profile and Subject Tables datasets."* This is a Census Bureau tabulation policy (stable across all ACS 5-year vintages 2011–2024), not a limitation of this package or of `tidycensus`. An eighth component, working-class occupation, comes from detailed table `C24060`, which is also not published for block groups.
+
+The Messer method uses only detailed (`B`/`C`) tables, but the Census Bureau does not publish every detailed table for block groups either. Tables that Messer needs stop at the census tract: `B25115` (female-headed households with children) and `B06009` (educational attainment), and in 2013 also `B19058` (public assistance). Without them the index cannot be computed, so `computeNDI()` stops with an error for `geo = "block group"` with either method. For a block-group measure, use `computeICE()`.
 
 ### Missing data: complete cases vs. pairwise correlation
 
@@ -80,19 +82,19 @@ Key options (mirroring `ReproducibleYostIndex`):
 
 `computeICE()` computes Krieger's Index of Concentration at the Extremes, a separate family of measures from the NDI functions above. Each ICE measure is a self-contained per-geography ratio, `(Advantaged − Deprived) / Total`, ranging from −1 to +1 — so, unlike the NDI measures, it involves no cross-geography ranking or PCA and therefore has **no `scope` argument**.
 
-`computeICE()` returns all five measures from `ndi::krieger`: `ICE_inc` (income), `ICE_edu` (education), `ICE_rewb` (race: NH-white vs NH-Black), `ICE_wbinc` (high-income white vs low-income Black), and `ICE_wpcinc` (income concentration among white households). Because every ICE variable comes from ACS detailed (`B`) tables, ICE is available at **county, tract, and block group** — including the block-group reach that Powell-Wiley cannot offer.
+`computeICE()` returns all five measures from `ndi::krieger`: `ICE_inc` (income), `ICE_edu` (education), `ICE_rewb` (race: NH-white vs NH-Black), `ICE_wbinc` (high-income white vs low-income Black), and `ICE_wpcinc` (income concentration among white households). Because every ICE variable comes from ACS detailed (`B`) tables, ICE is available at **county, tract, and block group**. At block group, `ICE_inc`, `ICE_edu` and `ICE_rewb` are computed; `ICE_wbinc` and `ICE_wpcinc` are not returned, because household income by race (`B19001H`, `B19001B`) is not published for block groups.
 
 ```r
 # ICE for Rhode Island tracts, 2022 (all five measures)
 ice_ri <- computeICE(geo = "tract", year = 2022, states = "RI")
 head(ice_ri$df_ice)
 
-# Block-group ICE, minimal output
+# Block-group ICE (ICE_inc, ICE_edu, ICE_rewb only), minimal output
 ice_bg <- computeICE(geo = "block group", year = 2022, states = "RI",
                      return_format = "minimal")
 ```
 
-Spatial imputation is not yet implemented for `computeICE()`; the `impute` argument is reserved for a future release.
+Setting `impute = TRUE` fills missing ICE measures with the unweighted mean of their queen-contiguity neighbors. Only geographies with population are imputed or used as neighbors; a geography with no population keeps its raw values and is annotated `"No population"`. The result then also carries `nvar_imputed`, `nvar_still_missing`, `vars_imputed` and `annotation`, and the detailed output includes the pre-imputation baseline as `df_ice_raw`.
 
 ## Status
 
