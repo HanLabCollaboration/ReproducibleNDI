@@ -37,7 +37,9 @@
 #' @param impute Logical. If `TRUE`, missing values in each of the five ICE
 #'   measures are spatially imputed from Queen-contiguity neighbors via
 #'   \code{\link{imputeMissingICE}} (geometry is required, so `keep_geometry` is
-#'   forced to `TRUE`). The returned `df_ice` then carries the imputed measures
+#'   forced to `TRUE`). Only geographies with population (`tot_pop > 0`) are
+#'   imputed or used as neighbors; a geography with no population keeps its raw
+#'   measures and is annotated `"No population"`. The returned `df_ice` then carries the imputed measures
 #'   plus `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and an
 #'   `annotation` column, and the pre-imputation baseline is also returned as
 #'   `df_ice_raw`. Defaults to `FALSE`.
@@ -183,19 +185,36 @@ computeICE <- function(
     }
     if (!quiet) message("Imputing missing ICE measures via spatial neighbors...")
 
-    ice_imp <- imputeMissingICE(ice_data, weight_var = "none",
-                                measures = ice_cols, quiet = quiet)
+    # Only geographies with population are imputed, and only they serve as
+    # neighbors (as in computeNDI). The others keep their raw measures.
+    has_pop <- !is.na(ice_data$tot_pop) & ice_data$tot_pop > 0
+    if (!quiet) message(glue::glue("... there are {sum(!has_pop)} geoids with no population."))
+
+    ice_no_pop <- sf::st_drop_geometry(ice_data[!has_pop, ])
+    ice_no_pop$nvar_imputed       <- rep(0, nrow(ice_no_pop))
+    ice_no_pop$nvar_still_missing <- rowSums(is.na(ice_no_pop[, ice_cols, drop = FALSE]))
+    ice_no_pop$vars_imputed       <- rep(NA_character_, nrow(ice_no_pop))
+
+    if (any(has_pop)) {
+      ice_imp <- imputeMissingICE(ice_data[has_pop, ], weight_var = "none",
+                                  measures = ice_cols, quiet = quiet)
+      ice_imp <- dplyr::bind_rows(ice_imp, ice_no_pop)
+    } else {
+      ice_imp <- ice_no_pop
+    }
 
     df_ice <- ice_imp |>
       dplyr::select(GEOID, dplyr::any_of(name_cols), dplyr::all_of(ice_cols),
-                    nvar_imputed, nvar_still_missing, vars_imputed) |>
+                    tot_pop, nvar_imputed, nvar_still_missing, vars_imputed) |>
       dplyr::mutate(
         annotation = dplyr::case_when(
+          tot_pop == 0           ~ "No population",
           nvar_still_missing > 0 ~ "Imputation incomplete",
           nvar_imputed > 0       ~ "Imputation completed",
           TRUE                   ~ "Complete data"
         )
       ) |>
+      dplyr::select(-tot_pop) |>
       dplyr::arrange(GEOID)
   } else {
     df_ice <- df_ice_raw

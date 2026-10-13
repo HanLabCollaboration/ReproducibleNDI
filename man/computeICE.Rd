@@ -29,7 +29,9 @@ computeICE(
 \item{impute}{Logical. If `TRUE`, missing values in each of the five ICE
 measures are spatially imputed from Queen-contiguity neighbors via
 \code{\link{imputeMissingICE}} (geometry is required, so `keep_geometry` is
-forced to `TRUE`). The returned `df_ice` then carries the imputed measures
+forced to `TRUE`). Only geographies with population (`tot_pop > 0`) are
+imputed or used as neighbors; a geography with no population keeps its raw
+measures and is annotated `"No population"`. The returned `df_ice` then carries the imputed measures
 plus `nvar_imputed`, `nvar_still_missing`, `vars_imputed`, and an
 `annotation` column, and the pre-imputation baseline is also returned as
 `df_ice_raw`. Defaults to `FALSE`.}
