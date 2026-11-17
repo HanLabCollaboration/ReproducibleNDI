@@ -1,4 +1,3 @@
-<!-- README.md is generated from README.Rmd. Please edit that file -->
 
 <!-- badges: start -->
 
@@ -15,8 +14,8 @@ MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.or
 
 The goal of `ReproducibleNDI` is to provide a simple, tidy interface for
 calculating the **Neighborhood Deprivation Index (NDI)**, a composite
-measure of neighborhood-level socioeconomic status (SES), using data from
-the US Census Bureau's American Community Survey (ACS).
+measure of neighborhood-level socioeconomic status (SES), using data
+from the US Census Bureau’s American Community Survey (ACS).
 
 ## What is the Neighborhood Deprivation Index?
 
@@ -28,71 +27,106 @@ computes the index for counties and census tracts.
 Several NDI methodologies exist; the `type` parameter selects which one
 to compute. Currently implemented:
 
-- **`type = "messer"`** — Messer et al. (2006), following the
+- **`type = "messer"`** — Messer et al. (2006), following the
   implementation of the [`ndi`](https://CRAN.R-project.org/package=ndi)
   package. A single principal component is extracted from 8 ACS-derived
   component variables (occupation, crowding, poverty, female-headed
   households, public assistance, income under \$30k, education,
   unemployment). Available for **county and tract only** (see below);
   returns a quartile grouping (`NDIQuartile`).
-- **`type = "powell_wiley"`** — Andrews et al. (2020), following the
+- **`type = "powell_wiley"`** — Andrews et al. (2020), following the
   implementation of the `ndi` package. A promax-rotated PCA (Kaiser
-  criterion for the number of factors) is fit to 13 ACS-derived component
-  variables. Available for **county and tract only** (see below), and this
-  package returns the **score only** (the population-weighted quintile
-  grouping is not computed).
+  criterion for the number of factors) is fit to 13 ACS-derived
+  component variables. Available for **county and tract only** (see
+  below), and this package returns the **score only** (the
+  population-weighted quintile grouping is not computed).
 
 ### Why the NDI is not available at block group
 
-Seven of Powell-Wiley's 13 components — owner-occupancy, telephone
-service, plumbing, educational attainment (two components), family
-poverty, and unemployment — are drawn from the ACS **Data Profile (`DP`)** and
-**Subject (`S`)** tables. The US Census Bureau does not tabulate those two
-dataset families below the census-tract level, so `tidycensus::get_acs()`
-cannot retrieve them for block groups; the request fails with *"Block
+Neither method can be computed at block group from the same ACS tables
+it uses at tract and county. The Census Bureau does not publish every
+ACS table for block groups, and both methods need at least one table
+that stops at the census tract in every ACS 5-year release. This is a
+Census Bureau tabulation rule, not a limitation of this package or of
+`tidycensus`. Swapping in a different table would change the index, so
+the package does not do it: `computeNDI()` stops with an error for
+`geo = "block group"` (or `"cbg"`) with either method. For a block-group
+measure, use `computeICE()`.
+
+The tables below list every component and whether its table is published
+for block groups (ACS 5-year, 2013–2024).
+
+**Messer** (8 components, detailed tables only). Two tables are never
+published for block groups, and a third only from 2018:
+
+| Component | Table | At block group |
+|----|----|----|
+| Males in management, business, science and arts occupations | `C24030` | Yes |
+| Crowded housing (\> 1 occupant per room) | `B25014` | Yes |
+| Households below poverty | `B17017` | Yes |
+| Female-headed households with dependent children | `B25115` | **No** (all years) |
+| Households on public assistance or food stamps | `B19058` | **No** for 2013–2017; yes from 2018 |
+| Households earning under \$30,000 | `B19001` | Yes |
+| Adults 25+ with less than high school | `B06009` | **No** (all years) |
+| Unemployed (civilian labor force) | `B23025` | Yes |
+
+**Powell-Wiley** (13 components). Seven come from the Data Profile
+(`DP`) and Subject (`S`) tables, which the Census Bureau does not
+publish below the tract; `tidycensus::get_acs()` fails with *“Block
 groups are not an available geography in the Data Profile and Subject
-Tables datasets."* This is a Census Bureau tabulation policy (stable across
-all ACS 5-year vintages 2011–2024), not a limitation of this package or of
-`tidycensus`. An eighth component, working-class occupation, comes from
-detailed table `C24060`, which is also not published for block groups.
+Tables datasets.”* One more detailed table is also not published for
+block groups:
 
-The Messer method uses only detailed (`B`/`C`) tables, but the Census
-Bureau does not publish every detailed table for block groups either.
-Tables that Messer needs stop at the census tract: `B25115`
-(female-headed households with children) and `B06009` (educational
-attainment), and in 2013 also `B19058` (public assistance). Without them
-the index cannot be computed, so `computeNDI()` stops with an error for
-`geo = "block group"` with either method. For a block-group measure, use
-`computeICE()`.
+| Component | Table | At block group |
+|----|----|----|
+| Median household income | `B19013` | Yes |
+| Households with interest, dividends or net rental income | `B19054` | Yes |
+| Households with public assistance income | `B19058` | **No** for 2013–2017; yes from 2018 |
+| Median home value | `B25077` | Yes |
+| Management, business, science and arts occupations | `C24060` | **No** (all years) |
+| Female-headed households with own children | `B11005` | Yes |
+| Owner-occupied housing units | `DP04` | **No** (Data Profile) |
+| No telephone service | `DP04` | **No** (Data Profile) |
+| Lacking complete plumbing | `DP04` | **No** (Data Profile) |
+| High school or more (25+) | `S1501` | **No** (Subject table) |
+| Bachelor’s degree or more (25+) | `S1501` | **No** (Subject table) |
+| Families below poverty | `S1702` | **No** (Subject table) |
+| Unemployment rate | `S2301` | **No** (Subject table) |
 
-### Missing data: complete cases vs. pairwise correlation
+“No” for a detailed table means
+`get_acs(geography = "block group", ...)` returns the table’s variables
+as all `NA`. This was checked for every release from 2013 to 2024
+(block-group ACS 5-year data starts in 2013) on all block groups of
+Bristol County, RI.
+
+### Missing data: complete cases vs. pairwise correlation
 
 Both NDI methods here fit their PCA on **complete cases only**. Any
-geography missing one or more of the method's component variables is
+geography missing one or more of the method’s component variables is
 dropped *before* the component correlation matrix is computed (listwise
 deletion); unless `impute = TRUE`, that geography then receives an `NA`
 index score and is flagged in the `annotation` column.
 
 This is a deliberate deviation from the original
-[`ndi`](https://CRAN.R-project.org/package=ndi) package, which passes the
-component data straight to `psych::principal()` and therefore builds the
-correlation matrix from **pairwise-complete observations** (psych's
+[`ndi`](https://CRAN.R-project.org/package=ndi) package, which passes
+the component data straight to `psych::principal()` and therefore builds
+the correlation matrix from **pairwise-complete observations** (psych’s
 default `use = "pairwise"`). Under that approach a partially-missing
 geography still contributes to every pairwise correlation for which it
 observes *both* variables.
 
 Why this matters:
 
-- The set of geographies that determine the component loadings can differ
-  between the two approaches, so the fitted weights — and therefore the
-  resulting scores — may differ slightly from `ndi`, most noticeably in
-  scopes with substantial missingness.
+- The set of geographies that determine the component loadings can
+  differ between the two approaches, so the fitted weights — and
+  therefore the resulting scores — may differ slightly from `ndi`, most
+  noticeably in scopes with substantial missingness.
 - Complete-case fitting is the stricter, more transparent choice: the
-  fitting sample is exactly the set of fully-observed geographies, with no
-  geography contributing to some correlations but not others. Setting
+  fitting sample is exactly the set of fully-observed geographies, with
+  no geography contributing to some correlations but not others. Setting
   `impute = TRUE` (queen-contiguity spatial mean) fills the missing
-  components so those geographies rejoin the complete-case set before the
-  PCA is fit.
+  components so those geographies rejoin the complete-case set before
+  the PCA is fit.
 
 ## Usage
 
@@ -128,20 +162,41 @@ Key options (mirroring `ReproducibleYostIndex`):
 
 ## Index of Concentration at the Extremes (ICE)
 
-`computeICE()` computes Krieger's Index of Concentration at the Extremes, a
-separate family of measures from the NDI functions above. Each ICE measure
-is a self-contained per-geography ratio, `(Advantaged − Deprived) / Total`,
-ranging from −1 to +1 — so, unlike the NDI measures, it involves no
-cross-geography ranking or PCA and therefore has **no `scope` argument**.
+`computeICE()` computes Krieger’s Index of Concentration at the
+Extremes, a separate family of measures from the NDI functions above.
+Each ICE measure is a self-contained per-geography ratio,
+`(Advantaged − Deprived) / Total`, ranging from −1 to +1 — so, unlike
+the NDI measures, it involves no cross-geography ranking or PCA and
+therefore has **no `scope` argument**.
 
 `computeICE()` returns all five measures from `ndi::krieger`: `ICE_inc`
-(income), `ICE_edu` (education), `ICE_rewb` (race: NH-white vs NH-Black),
-`ICE_wbinc` (high-income white vs low-income Black), and `ICE_wpcinc`
-(income concentration among white households). Because every ICE variable
-comes from ACS detailed (`B`) tables, ICE is available at **county, tract,
-and block group**. At block group, `ICE_inc`, `ICE_edu` and `ICE_rewb` are
-computed; `ICE_wbinc` and `ICE_wpcinc` are not returned, because household
-income by race (`B19001H`, `B19001B`) is not published for block groups.
+(income), `ICE_edu` (education), `ICE_rewb` (race: NH-white vs
+NH-Black), `ICE_wbinc` (high-income white vs low-income Black), and
+`ICE_wpcinc` (income concentration among white households). Every ICE
+variable comes from ACS detailed (`B`) tables, so ICE is available at
+**county, tract, and block group**.
+
+### ICE at block group: three measures, not five
+
+At block group, `computeICE()` returns only **`ICE_inc`, `ICE_edu` and
+`ICE_rewb`**. `ICE_wbinc` and `ICE_wpcinc` are left out because they
+need household income by race (`B19001H`, `B19001B`), which the Census
+Bureau does not publish for block groups. As with the NDI, the package
+does not substitute another table. At county and tract all five measures
+are returned.
+
+| Measure | Tables | At block group |
+|----|----|----|
+| `ICE_inc` | `B19001` | Yes |
+| `ICE_edu` | `B15002` | Yes |
+| `ICE_rewb` | `B03002` | Yes |
+| `ICE_wbinc` | `B19001`, `B19001H`, `B19001B` | **No**: `B19001H` and `B19001B` are not published (all years) |
+| `ICE_wpcinc` | `B19001`, `B19001H` | **No**: `B19001H` is not published (all years) |
+
+This was checked the same way as for the NDI: `B19001H` and `B19001B`
+come back all `NA` for every block group in every ACS 5-year release
+from 2013 to 2024 (Bristol County, RI). Block-group ICE also requires
+`year >= 2013`.
 
 ``` r
 # ICE for Rhode Island tracts, 2022 (all five measures)
@@ -153,12 +208,13 @@ ice_bg <- computeICE(geo = "block group", year = 2022, states = "RI",
                      return_format = "minimal")
 ```
 
-Setting `impute = TRUE` fills missing ICE measures with the unweighted mean
-of their queen-contiguity neighbors. Only geographies with population are
-imputed or used as neighbors; a geography with no population keeps its raw
-values and is annotated `"No population"`. The result then also carries
-`nvar_imputed`, `nvar_still_missing`, `vars_imputed` and `annotation`, and
-the detailed output includes the pre-imputation baseline as `df_ice_raw`.
+Setting `impute = TRUE` fills missing ICE measures with the unweighted
+mean of their queen-contiguity neighbors. Only geographies with
+population are imputed or used as neighbors; a geography with no
+population keeps its raw values and is annotated `"No population"`. The
+result then also carries `nvar_imputed`, `nvar_still_missing`,
+`vars_imputed` and `annotation`, and the detailed output includes the
+pre-imputation baseline as `df_ice_raw`.
 
 ## Status
 
