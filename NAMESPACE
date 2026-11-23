@@ -3,6 +3,7 @@
 export("%>%")
 export(computeICE)
 export(computeNDI)
+export(computeOriginalNDI)
 export(imputeMissing)
 export(imputeMissingICE)
 importFrom(dplyr,across)
